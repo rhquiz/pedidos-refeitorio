@@ -25,10 +25,70 @@ async function chooseMeal(){show('<h2>CARREGANDO CARDÁPIO...</h2>');try{const m
 const flavors=[['Simples','meal'],['Queijo','cheese'],['Presunto e queijo','hamcheese'],['Presunto','ham'],['Ovo cozido','egg']];function chooseFlavor(){show(`<span class="tag">${esc(format(dateChoice).toUpperCase())}</span><h2>ESCOLHA SEU OMELETE</h2><p class="hint">Toque na opção desejada.</p><div class="flavors">${flavors.map(([name,kind],i)=>`<button class="flavor" onclick="flavor=flavors[${i}][0];confirmScreen()">${art(kind,name)}${esc(name.toUpperCase())}<span class="roundarrow">➜</span></button>`).join('')}</div><button class="btn secondary" onclick="chooseMeal()">← VOLTAR</button>`)}function showSpecial(){show(`<span class="tag">${esc(format(dateChoice).toUpperCase())}</span><h2>ESPECIAL DE AMANHÃ</h2>${art('cloche')}<h3>${esc(special||'Especial do dia')}</h3><p class="hint">${special?'Preparado especialmente para você.':'O cardápio ainda não foi cadastrado pela Industrial.'}</p><div class="actions"><button class="btn secondary" onclick="chooseMeal()">VOLTAR</button><button class="btn primary" onclick="confirmScreen()">CONTINUAR ➜</button></div>`)}function confirmScreen(){show(`<h2>CONFIRME SEU PEDIDO</h2>${art(meal==='ESPECIAL'?'cloche':(flavors.find(x=>x[0]===flavor)?.[1]||'meal'))}<div class="summary"><p><strong>Colaborador:</strong> ${esc(person.nome)}</p><p><strong>Data:</strong> ${esc(format(dateChoice))}</p><p><strong>Refeição:</strong> ${esc(meal==='ESPECIAL'?(special||'Especial do dia'):(flavor==='Ovo cozido'?'Ovo cozido':'Omelete de '+flavor.toLowerCase()))}</p></div><div class="actions"><button class="btn secondary" onclick="chooseMeal()">ALTERAR</button><button id="saveBtn" class="btn primary" onclick="saveOrder()">CONFIRMAR PEDIDO ✓</button></div>`)}
 async function saveOrder(){if(processing)return;processing=true;document.getElementById('saveBtn').disabled=true;try{const res=await rpc('totem_salvar_pedido',{p_cracha:badge,p_data:dateChoice,p_tipo:meal,p_sabor:meal==='OMELETE'?flavor:null});if(!res?.ok)throw new Error('Pedido não confirmado pelo servidor.');success()}catch(e){if(/já existe|ja existe|duplicad|unique/i.test(e.message||'')){show(`<h2>VOCÊ JÁ FEZ SEU PEDIDO</h2><p class="hint">Já existe um pedido para ${esc(format(dateChoice))}.</p><button class="btn primary" onclick="home()">VOLTAR AO INÍCIO</button>`)}else{err(e);confirmScreen()}}finally{processing=false}}
 function success(){show(`<h2>PEDIDO CONFIRMADO!</h2>${art('success')}<h3>OBRIGADO!</h3><p class="hint">Sua refeição foi registrada com sucesso.</p><button class="btn primary wide" onclick="home()">NOVO PEDIDO ➜</button><p class="notice">Voltando ao início em <strong id="seconds">5</strong> segundos...</p>`);let n=5;timer=setInterval(()=>{n--;const el=document.getElementById('seconds');if(el)el.textContent=n;if(n<=0){clearInterval(timer);home()}},1000)}
-async function startCamera(){stopCamera();const wrap=document.getElementById('cameraWrap');wrap.classList.remove('hidden');const hint=document.getElementById('cameraHint');if(!navigator.mediaDevices?.getUserMedia){hint.textContent='Câmera indisponível neste navegador. Digite o crachá ou use leitor físico.';return}try{stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false});const video=document.getElementById('camera');video.srcObject=stream;await video.play();if('BarcodeDetector' in window){let formats=['code_128','code_39','ean_13','ean_8','itf','codabar','qr_code'];if(BarcodeDetector.getSupportedFormats){const supported=await BarcodeDetector.getSupportedFormats();formats=formats.filter(f=>supported.includes(f))}if(formats.length){scanDetector=new BarcodeDetector({formats});scannerTimer=setInterval(async()=>{if(scannerBusy||!stream||video.readyState<2)return;scannerBusy=true;try{const found=await scanDetector.detect(video);if(found.length){const value=found[0].rawValue;stopCamera();lookup(value)}}catch(e){console.warn('Falha temporária na leitura',e)}finally{scannerBusy=false}},300);return}}
-// Alternativa para navegadores sem BarcodeDetector nativo.
-await new Promise((resolve,reject)=>{const s=document.createElement('script');s.src='https://unpkg.com/@zxing/library@0.21.3/umd/index.min.js';s.onload=resolve;s.onerror=reject;document.head.appendChild(s)});if(!window.ZXing)throw new Error('Biblioteca de leitura indisponível');scanFallback=new ZXing.BrowserMultiFormatReader();scanFallback.decodeFromVideoElementContinuously(video,(result)=>{if(result&&stream){const value=result.getText();stopCamera();lookup(value)}});hint.textContent='Aponte o código de barras ou QR Code para o retângulo.';
-}catch(e){console.error(e);hint.textContent='Não foi possível iniciar a leitura automática. Permita o acesso à câmera ou digite o crachá.';if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}}
-function stopCamera(){if(scannerTimer){clearInterval(scannerTimer);scannerTimer=null}if(scanFallback){try{scanFallback.reset()}catch{}scanFallback=null}if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}const wrap=document.getElementById('cameraWrap');if(wrap)wrap.classList.add('hidden');scanDetector=null}
+// Leitor ZXing: usa a câmera traseira e lê códigos de barras lineares.
+// Necessita HTTPS e acesso à biblioteca CDN no dispositivo.
+let cameraSession=0;
+function loadZXing(){
+  if(window.ZXing?.BrowserMultiFormatReader)return Promise.resolve();
+  if(window.zxingLoading)return window.zxingLoading;
+  window.zxingLoading=new Promise((resolve,reject)=>{
+    const script=document.createElement('script');
+    script.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js';
+    script.onload=()=>window.ZXing?.BrowserMultiFormatReader?resolve():reject(new Error('ZXing indisponível'));
+    script.onerror=()=>reject(new Error('Não foi possível carregar a biblioteca ZXing. Confira a internet.'));
+    document.head.appendChild(script);
+  }).catch(e=>{window.zxingLoading=null;throw e});
+  return window.zxingLoading;
+}
+async function startCamera(){
+  stopCamera();
+  const session=++cameraSession;
+  const wrap=document.getElementById('cameraWrap');
+  const hint=document.getElementById('cameraHint');
+  if(!wrap||!hint)return;
+  wrap.classList.remove('hidden');
+  hint.textContent='Preparando câmera...';
+  if(!navigator.mediaDevices?.getUserMedia){hint.textContent='Abra o site em HTTPS no Chrome ou Safari e autorize a câmera.';return}
+  try{
+    await loadZXing();
+    if(session!==cameraSession)return;
+    const formats=[ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.CODE_39,
+      ZXing.BarcodeFormat.ITF,ZXing.BarcodeFormat.CODABAR,
+      ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8];
+    const hints=new Map();
+    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,formats);
+    hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
+    scanFallback=new ZXing.BrowserMultiFormatReader(hints,250);
+    hint.textContent='Posicione as listrinhas na horizontal, dentro da área. Afaste um pouco para focar.';
+    await scanFallback.decodeFromConstraints(
+      {audio:false,video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}}},
+      'camera',
+      (result,error)=>{
+        if(session!==cameraSession||!result||processing)return;
+        const code=String(result.getText()||'').trim();
+        if(!code)return;
+        stopCamera();
+        if(navigator.vibrate)navigator.vibrate(80);
+        lookup(code); // Mantém os zeros iniciais do crachá.
+      }
+    );
+  }catch(e){
+    if(session!==cameraSession)return;
+    console.error('Erro de leitura de crachá:',e);
+    hint.textContent='Não foi possível ler pela câmera. Verifique a permissão e tente novamente ou digite o crachá.';
+    if(scanFallback){try{scanFallback.reset()}catch{}scanFallback=null}
+  }
+}
+function stopCamera(){
+  cameraSession++;
+  if(scannerTimer){clearInterval(scannerTimer);scannerTimer=null}
+  if(scanFallback){try{scanFallback.reset()}catch{}scanFallback=null}
+  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
+  const video=document.getElementById('camera');
+  if(video?.srcObject){try{video.srcObject.getTracks().forEach(t=>t.stop())}catch{}video.srcObject=null}
+  const wrap=document.getElementById('cameraWrap');
+  if(wrap)wrap.classList.add('hidden');
+  scanDetector=null;
+}
 window.addEventListener('beforeunload',stopCamera);home();
 </script></body></html>
