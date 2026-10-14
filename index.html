@@ -10,6 +10,10 @@
 .special-dish{display:block;width:min(100%,850px);margin:16px auto 12px;padding:16px 25px;border-radius:35px;background:#e8e8e3;color:#873f4a;font-size:clamp(26px,3.4vw,40px);font-weight:900;line-height:1.25;text-align:center;overflow-wrap:anywhere}
 .special-art .illustration{height:clamp(145px,19vw,205px);width:auto;max-width:100%}
 .datechoice.selected{border-color:#24583f;background:#e2efdc;box-shadow:inset 0 0 0 2px #24583f}
+
+/* Totem: interface compacta e leitura de crachá em destaque */
+@media (min-width:700px) and (max-height:850px){.shell{padding:10px 22px}.panel{padding:18px 28px;border-radius:26px}h1{font-size:clamp(42px,7vh,70px)}h2{font-size:clamp(26px,5vh,42px)}.illustration{height:clamp(110px,22vh,180px)}.tag{margin-bottom:8px}.hint{margin-bottom:8px}.btn{min-height:52px;padding:12px 22px}.main{padding:4px 0}}
+.scan-panel{width:min(100%,1050px)}.scan-panel .scanner{max-width:900px;margin:12px auto}.scan-panel .scanner video{width:100%;height:clamp(260px,55dvh,620px);max-height:none;object-fit:cover}.scan-panel .scanbox{inset:22% 12%}.scan-panel .actions{margin-top:12px}.scan-panel h2{margin-bottom:6px}.scan-panel .hint{font-size:clamp(15px,1.7vw,21px)}
 </style></head><body><div class="shell"><header class="header"><div class="logo"><span class="leaf">✦</span> VYLOR<small>REFEITÓRIO • CULTIVANDO O FUTURO</small></div><button class="back" id="homeButton" onclick="home()">⌂ Início</button></header><main class="main" id="app"></main><footer class="footer">Refeitório VYLOR · Pedidos de refeições</footer></div>
 <script>
 'use strict';
@@ -30,9 +34,100 @@ if(kind==='egg')dish='<ellipse cx="160" cy="139" rx="64" ry="31" fill="#fff7df" 
 else{dish='<path d="M84 145q15-73 95-68 61 4 64 65-61 48-159 3" fill="#e5b758" stroke="#c98b38" stroke-width="5"/><path d="M102 128q55-39 110 1" fill="none" stroke="#fbe49a" stroke-width="14" stroke-linecap="round"/>';if(kind==='cheese'||kind==='hamcheese')dish+='<path d="M130 118l17 6 12-10 19 10" fill="none" stroke="#fff2bb" stroke-width="11" stroke-linecap="round"/>';if(kind==='ham'||kind==='hamcheese')dish+='<g fill="#cd857a"><rect x="111" y="124" width="17" height="9" rx="4"/><rect x="176" y="129" width="19" height="9" rx="4"/></g>';dish+='<g fill="#518b52"><ellipse cx="112" cy="148" rx="8" ry="4"/><ellipse cx="199" cy="143" rx="8" ry="4"/><ellipse cx="154" cy="154" rx="7" ry="3"/></g>'}return `<svg class="illustration" viewBox="0 0 320 210" aria-label="${esc(label)}" role="img">${base}${dish}<path d="M65 172q25 14 45 0" stroke="#7fa37a" stroke-width="5" fill="none" stroke-linecap="round"/></svg>`};
 const show=(html,center=true)=>{app.innerHTML=`<section class="panel ${center?'center':''}">${html}</section>`};const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};const plusDays=n=>{const d=new Date(today()+'T12:00:00');d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};const format=d=>new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
 async function rpc(name,args){const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(args)});const t=await r.text();let data;try{data=t?JSON.parse(t):null}catch{data=t}if(!r.ok)throw new Error(typeof data==='object'?(data.message||data.error||'Falha de comunicação'):String(data));return data}
-function err(e){console.error(e);alert('Não foi possível concluir: '+(e.message||'erro desconhecido')+'. Confira a conexão e a configuração do Supabase.')}function clearState(){clearTimeout(timer);stopCamera();person=null;badge='';dateChoice='';meal='';flavor='';special='';processing=false;selectedDates=[];pendingDates=[]}function home(){clearState();show(`<span class="tag">BEM-VINDO AO NOSSO REFEITÓRIO</span><h1>BOA<br>REFEIÇÃO!</h1>${art('silvercloche','Cloche prateada')}<p class="hint">Uma refeição especial começa com uma escolha.</p><button class="btn primary wide" onclick="badgeScreen()">FAZER MEU PEDIDO &nbsp; ➜</button>`)}
-function badgeScreen(){stopCamera();show(`<h2>IDENTIFIQUE-SE</h2><p class="hint">Aproxime seu crachá para começar o pedido.</p>${art('badge')}<button class="btn primary wide" onclick="startCamera()">▣ &nbsp; CLIQUE E APROXIME SEU CRACHÁ</button><div id="cameraWrap" class="hidden"><div class="scanner"><video id="camera" autoplay playsinline muted></video><div class="scanbox"></div></div><p id="cameraHint" class="hint">Centralize o código de barras ou QR Code no retângulo.</p><button class="btn secondary" onclick="stopCamera()">Fechar câmera</button></div><div class="field"><label for="badgeInput">Ou digite o número do crachá</label><input id="badgeInput" autocomplete="off" inputmode="numeric" placeholder="Número do crachá" onkeydown="if(event.key==='Enter')lookup()"></div><div class="actions"><button class="btn secondary" onclick="home()">VOLTAR</button><button class="btn primary" onclick="lookup()">CONTINUAR ➜</button></div><p class="notice">Leitor USB/Bluetooth: posicione o cursor no campo do crachá e aproxime o cartão.</p>`);document.getElementById('badgeInput').focus();startCamera()}
-async function lookup(raw){if(processing)return;const code=String(raw??document.getElementById('badgeInput')?.value??'').trim();if(!code){alert('Informe ou leia o número do crachá.');return}processing=true;stopCamera();badge=code;show('<h2>CONSULTANDO CRACHÁ...</h2><p class="hint">Só um instante.</p>');try{const p=await rpc('totem_buscar_colaborador',{p_cracha:badge});if(p&&p.ativo!==false){person=p;chooseDate()}else if(p&&p.ativo===false){show('<h2>ACESSO INDISPONÍVEL</h2><p class="hint">Seu cadastro está inativo. Procure a equipe responsável.</p><button class="btn primary" onclick="home()">VOLTAR</button>')}else registerScreen()}catch(e){err(e);badgeScreen()}finally{processing=false}}
+function err(e){console.error(e);alert('Não foi possível concluir: '+(e.message||'erro desconhecido')+'. Confira a conexão e a configuração do Supabase.')}function clearState(){clearTimeout(timer);clearCpfFallbackTimer();stopCamera();person=null;badge='';dateChoice='';meal='';flavor='';special='';processing=false;selectedDates=[];pendingDates=[]}function home(){clearState();show(`<span class="tag">BEM-VINDO AO NOSSO REFEITÓRIO</span><h1>BOA<br>REFEIÇÃO!</h1>${art('silvercloche','Cloche prateada')}<p class="hint">Uma refeição especial começa com uma escolha.</p><button class="btn primary wide" onclick="badgeScreen()">FAZER MEU PEDIDO &nbsp; ➜</button>`)}
+function badgeScreen(){
+ stopCamera();
+ show(`<h2>APROXIME SEU CRACHÁ</h2><p class="hint">Posicione o código de barras na horizontal, dentro do retângulo.</p><div id="cameraWrap"><div class="scanner"><video id="camera" autoplay playsinline muted></video><div class="scanbox"></div></div><p id="cameraHint" class="hint" aria-live="polite">Preparando câmera frontal...</p></div><div class="actions"><button class="btn secondary" onclick="home()">VOLTAR AO INÍCIO</button><button class="btn outline" onclick="startCpfFallbackTimer();startCamera()">TENTAR NOVAMENTE</button></div>`);
+ document.querySelector('.panel')?.classList.add('scan-panel');
+ const hint=document.getElementById('cameraHint');
+ if(hint)hint.insertAdjacentHTML('afterend','<p class="hint" id="scanCountdown">Tempo para leitura: <strong id="remainingSeconds">60</strong> segundos</p>');
+ startCpfFallbackTimer();
+ startCamera();
+}
+function clearCpfFallbackTimer(){
+ if(cpfFallbackTimer!==null){clearTimeout(cpfFallbackTimer);cpfFallbackTimer=null}
+ if(cpfCountdownTimer!==null){clearInterval(cpfCountdownTimer);cpfCountdownTimer=null}
+}
+function startCpfFallbackTimer(){
+ clearCpfFallbackTimer();
+ let seconds=60;
+ cpfCountdownTimer=setInterval(()=>{
+  seconds--;
+  const el=document.getElementById('remainingSeconds');
+  if(el)el.textContent=Math.max(seconds,0);
+ },1000);
+ cpfFallbackTimer=setTimeout(()=>{
+  clearCpfFallbackTimer();
+  stopCamera();
+  cpfScreen();
+ },60000);
+}
+function cpfScreen(){
+ clearCpfFallbackTimer();stopCamera();
+ show(`<span class="tag">IDENTIFICAÇÃO ALTERNATIVA</span><h2>INFORME SEU CPF</h2><p class="hint">Não foi possível ler o crachá em 1 minuto. Digite seu CPF para localizar seu cadastro.</p><form onsubmit="lookupCpf(event)"><div class="field"><label for="cpfInput">CPF</label><input id="cpfInput" type="text" inputmode="numeric" autocomplete="off" maxlength="14" placeholder="000.000.000-00" required></div><p class="notice">Seu CPF será utilizado somente para consultar seu cadastro. Confira seus dados antes de confirmar o pedido.</p><div class="actions"><button class="btn secondary" type="button" onclick="badgeScreen()">TENTAR CRACHÁ NOVAMENTE</button><button class="btn primary" id="cpfSubmit" type="submit">CONTINUAR ➜</button></div></form>`);
+}
+async function lookupCpf(event){
+ event.preventDefault();
+ if(processing)return;
+ const cpf=document.getElementById('cpfInput').value.replace(/\\D/g,'');
+ if(cpf.length!==11||/^(\\d)\\1{10}$/.test(cpf)){alert('Digite um CPF válido com 11 números.');return}
+ processing=true;
+ const btn=document.getElementById('cpfSubmit');if(btn)btn.disabled=true;
+ try{
+  // Esta função RPC precisa existir no Supabase, com acesso restrito e validação no servidor.
+  const result=await rpc('totem_buscar_colaborador_cpf',{p_cpf:cpf});
+  if(result&&result.ativo!==false){
+   person=result;
+   badge=String(result.cracha??result.numero_cracha??'').trim();
+   if(!badge)throw new Error('Cadastro localizado, mas sem número de crachá associado.');
+   chooseDate();
+  }else{
+   alert(result?.ativo===false?'Cadastro inativo. Procure a equipe responsável.':'CPF não localizado. Procure a equipe responsável.');
+   cpfScreen();
+  }
+ }catch(e){
+  console.error(e);
+  alert('A consulta por CPF ainda precisa ser habilitada no banco de dados ou está indisponível. Procure a equipe responsável.');
+  cpfScreen();
+ }finally{processing=false}
+}
+// Aceita códigos com ou sem zeros à esquerda. Mapeamentos específicos têm prioridade.
+const CRACHAS_VINCULADOS={'400531':'40'};
+function semZeros(valor){return valor.replace(/^0+(?=\d)/,'');}
+function codigoDoCracha(raw){
+ const original=String(raw??'').trim();
+ if(!/^\d{1,24}$/.test(original))return null;
+ const normalizado=semZeros(original);
+ return CRACHAS_VINCULADOS[normalizado]||normalizado;
+}
+async function lookup(raw){
+ if(processing)return;
+ const original=String(raw??'').trim();
+ const code=codigoDoCracha(original);
+ if(!code){
+  const hint=document.getElementById('cameraHint');
+  if(hint)hint.textContent='Leitura inválida. Aproxime o código de barras e tente novamente.';
+  return;
+ }
+ processing=true;clearCpfFallbackTimer();stopCamera();badge=code;
+ show('<h2>CONSULTANDO CRACHÁ...</h2><p class="hint">Só um instante.</p>');
+ try{
+  // Prioriza o crachá exato se já existir; caso contrário tenta sem zeros.
+  const vinculado=Boolean(CRACHAS_VINCULADOS[semZeros(original)]);
+  let p=null;
+  if(!vinculado && original!==badge){
+   p=await rpc('totem_buscar_colaborador',{p_cracha:original});
+   if(p)badge=original;
+  }
+  if(!p)p=await rpc('totem_buscar_colaborador',{p_cracha:badge});
+  if(p&&p.ativo!==false){person=p;chooseDate()}
+  else if(p&&p.ativo===false){show('<h2>ACESSO INDISPONÍVEL</h2><p class="hint">Seu cadastro está inativo. Procure a equipe responsável.</p><button class="btn primary" onclick="home()">VOLTAR</button>')}
+  else{
+   // Sem cadastro: não criar registros automaticamente a partir de leitura de câmera.
+   show(`<h2>CRACHÁ NÃO LOCALIZADO</h2><p class="hint">O código lido foi <strong>${esc(original)}</strong>.</p><p class="hint">Procure a equipe responsável para vincular o código de barras ao seu cadastro.</p><button class="btn primary" onclick="badgeScreen()">TENTAR NOVAMENTE</button><button class="btn secondary" onclick="home()" style="margin:12px">INÍCIO</button>`);
+  }
+ }catch(e){err(e);badgeScreen()}finally{processing=false}
+}
 function registerScreen(){show(`<h2>PRIMEIRO ACESSO</h2><p class="hint">Não encontramos o crachá <strong>${esc(badge)}</strong>. Faça seu cadastro uma única vez.</p>${art('badge')}<form id="regForm" onsubmit="register(event)"><div class="fields"><div class="field"><label for="nm">Nome completo</label><input id="nm" maxlength="100" minlength="3" required autocomplete="off"></div><div class="field"><label for="sector">Setor</label><select id="sector" required><option value="">Selecione</option>${['Recebimento','Beneficiamento','Classificação','Debulha','Secador','Torre / Ensaque','Tratamento Adicional','Armazém','Controle de Qualidade','Laboratório','Planejamento','Administrativo','Outro'].map(s=>`<option>${esc(s)}</option>`).join('')}</select></div><div class="field"><label for="shift">Turno automático (horário do pedido)</label><input id="shift" readonly value="${esc(turnoAutomatico())}"></div></div><div class="actions"><button type="button" class="btn secondary" onclick="badgeScreen()">VOLTAR</button><button id="regBtn" class="btn primary" type="submit">SALVAR CADASTRO ➜</button></div></form><p class="notice">Os dados são enviados ao banco de dados. Não é necessário cadastrar novamente nos próximos acessos.</p>`)}
 async function register(e){e.preventDefault();if(processing)return;const nome=document.getElementById('nm').value.trim(),setor=document.getElementById('sector').value,turno=turnoAutomatico();if(nome.length<3)return alert('Informe o nome completo.');processing=true;document.getElementById('regBtn').disabled=true;try{const p=await rpc('totem_cadastrar_colaborador',{p_cracha:badge,p_nome:nome,p_setor:setor,p_turno:turno});person=p;chooseDate()}catch(e){err(e);document.getElementById('regBtn').disabled=false}finally{processing=false}}
 function dates(){const day=new Date().getDay();if(day===5)return [{d:plusDays(1),title:'SÁBADO'},{d:plusDays(3),title:'SEGUNDA-FEIRA'}];if(day===6||day===0)return [];return [{d:plusDays(1),title:'AMANHÃ'}]}
@@ -46,7 +141,7 @@ function nextAfterDuplicate(){dateChoice=pendingDates.shift();meal='';flavor='';
 function success(){if(pendingDates.length){const done=dateChoice;dateChoice=pendingDates.shift();meal='';flavor='';special='';show(`<h2>PEDIDO CONFIRMADO!</h2>${art('success')}<p class="hint">Pedido para ${esc(format(done))} registrado!</p><div class="summary"><strong>Agora escolha a refeição para ${esc(format(dateChoice))}.</strong></div><button class="btn primary wide" onclick="chooseMeal()">FAZER O PRÓXIMO PEDIDO ➜</button><button class="btn secondary" onclick="home()" style="margin-top:12px">ENCERRAR</button>`);return}show(`<h2>PEDIDO CONFIRMADO!</h2>${art('success')}<h3>OBRIGADO!</h3><p class="hint">Sua refeição foi registrada com sucesso.</p><button class="btn primary wide" onclick="home()">NOVO PEDIDO ➜</button><p class="notice">Voltando ao início em <strong id="seconds">5</strong> segundos...</p>`);let n=5;timer=setInterval(()=>{n--;const el=document.getElementById('seconds');if(el)el.textContent=n;if(n<=0){clearInterval(timer);home()}},1000)}
 // Leitor ZXing: usa a câmera traseira e lê códigos de barras lineares.
 // Necessita HTTPS e acesso à biblioteca CDN no dispositivo.
-let cameraSession=0;
+let cameraSession=0;let cpfFallbackTimer=null;let cpfCountdownTimer=null;
 function loadZXing(){
   if(window.ZXing?.BrowserMultiFormatReader)return Promise.resolve();
   if(window.zxingLoading)return window.zxingLoading;
@@ -85,7 +180,11 @@ async function startCamera(){
       (result,error)=>{
         if(session!==cameraSession||!result||processing)return;
         const code=String(result.getText()||'').trim();
-        if(!code)return;
+        if(!codigoDoCracha(code)){
+          const hint=document.getElementById('cameraHint');
+          if(hint)hint.textContent='Código não numérico detectado. Reposicione o crachá.';
+          return;
+        }
         stopCamera();
         if(navigator.vibrate)navigator.vibrate(80);
         lookup(code); // Mantém os zeros iniciais do crachá.
