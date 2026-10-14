@@ -62,26 +62,23 @@ function startBadgeFallbackTimer(){
   badgeManualScreen();
  },60000);
 }
-function badgeManualScreen(){
+function badgeManualScreen(message="Não conseguimos ler seu crachá em 1 minuto. Informe o número do crachá para continuar."){
  clearBadgeFallbackTimer();stopCamera();
- show(`<span class="tag">IDENTIFICAÇÃO ALTERNATIVA</span><h2>DIGITE SEU CRACHÁ</h2><p class="hint">Não conseguimos ler seu crachá em 1 minuto. Informe o número do crachá para continuar.</p><form onsubmit="lookupBadgeManual(event)"><div class="field"><label for="manualBadgeInput">Número do crachá</label><input id="manualBadgeInput" type="text" inputmode="numeric" autocomplete="off" maxlength="24" placeholder="Número do crachá" required></div><div class="actions"><button class="btn secondary" type="button" onclick="badgeScreen()">TENTAR CÂMERA NOVAMENTE</button><button class="btn primary" id="manualBadgeSubmit" type="submit">CONTINUAR ➜</button></div></form>`);
+ show(`<span class="tag">IDENTIFICAÇÃO ALTERNATIVA</span><h2>DIGITE SEU CRACHÁ</h2><p class="hint">${esc(message)}</p><form onsubmit="lookupBadgeManual(event)"><div class="field"><label for="manualBadgeInput">Número do crachá</label><input id="manualBadgeInput" type="text" inputmode="numeric" autocomplete="off" maxlength="24" placeholder="Número do crachá" required></div><div class="actions"><button class="btn secondary" type="button" onclick="badgeScreen()">TENTAR CÂMERA NOVAMENTE</button><button class="btn primary" id="manualBadgeSubmit" type="submit">CONTINUAR ➜</button></div></form>`);
 }
 function lookupBadgeManual(event){
  event.preventDefault();
  const code=document.getElementById('manualBadgeInput')?.value.trim()||'';
  if(!/^\d{1,24}$/.test(code)){alert('Digite somente os números do crachá.');return}
- lookup(code);
+ lookup(code,true);
 }
-// Aceita códigos com ou sem zeros à esquerda. Mapeamentos específicos têm prioridade.
-const CRACHAS_VINCULADOS={'400531':'40'};
-function semZeros(valor){return valor.replace(/^0+(?=\d)/,'');}
+// Retira somente os zeros iniciais. Ex.: 0000400531 -> 400531.
 function codigoDoCracha(raw){
  const original=String(raw??'').trim();
  if(!/^\d{1,24}$/.test(original))return null;
- const normalizado=semZeros(original);
- return CRACHAS_VINCULADOS[normalizado]||normalizado;
+ return original.replace(/^0+(?=\d)/,'');
 }
-async function lookup(raw){
+async function lookup(raw,manual=false){
  if(processing)return;
  const original=String(raw??'').trim();
  const code=codigoDoCracha(original);
@@ -93,21 +90,22 @@ async function lookup(raw){
  processing=true;clearBadgeFallbackTimer();stopCamera();badge=code;
  show('<h2>CONSULTANDO CRACHÁ...</h2><p class="hint">Só um instante.</p>');
  try{
-  // Prioriza o crachá exato se já existir; caso contrário tenta sem zeros.
-  const vinculado=Boolean(CRACHAS_VINCULADOS[semZeros(original)]);
-  let p=null;
-  if(!vinculado && original!==badge){
+  // Primeiro procura o número sem zeros; evita usar um cadastro antigo inativo.
+  let p=await rpc('totem_buscar_colaborador',{p_cracha:code});
+  // Compatibilidade: se só houver registro com zeros, tenta o código original.
+  if(!p && original!==code){
    p=await rpc('totem_buscar_colaborador',{p_cracha:original});
    if(p)badge=original;
   }
-  if(!p)p=await rpc('totem_buscar_colaborador',{p_cracha:badge});
   if(p&&p.ativo!==false){person=p;chooseDate()}
-  else if(p&&p.ativo===false){show('<h2>ACESSO INDISPONÍVEL</h2><p class="hint">Seu cadastro está inativo. Procure a equipe responsável.</p><button class="btn primary" onclick="home()">VOLTAR</button>')}
-  else{
-   // Sem cadastro: não criar registros automaticamente a partir de leitura de câmera.
-   show(`<h2>CRACHÁ NÃO LOCALIZADO</h2><p class="hint">O código lido foi <strong>${esc(original)}</strong>.</p><p class="hint">Procure a equipe responsável para vincular o código de barras ao seu cadastro.</p><button class="btn primary" onclick="badgeScreen()">TENTAR NOVAMENTE</button><button class="btn secondary" onclick="home()" style="margin:12px">INÍCIO</button>`);
+  else if(p&&p.ativo===false){
+   badgeManualScreen('O cadastro encontrado está inativo. Confira o número ou procure a equipe responsável.');
+  }else{
+   badgeManualScreen(manual
+    ? 'Número não encontrado. Confira o crachá digitado ou procure a equipe responsável.'
+    : 'Não encontramos o código lido ('+original+'). Digite seu número de crachá para continuar.');
   }
- }catch(e){err(e);badgeScreen()}finally{processing=false}
+ }catch(e){err(e);badgeManualScreen('Falha na consulta. Confira a conexão e tente digitar o crachá novamente.')}finally{processing=false}
 }
 function registerScreen(){show(`<h2>PRIMEIRO ACESSO</h2><p class="hint">Não encontramos o crachá <strong>${esc(badge)}</strong>. Faça seu cadastro uma única vez.</p>${art('badge')}<form id="regForm" onsubmit="register(event)"><div class="fields"><div class="field"><label for="nm">Nome completo</label><input id="nm" maxlength="100" minlength="3" required autocomplete="off"></div><div class="field"><label for="sector">Setor</label><select id="sector" required><option value="">Selecione</option>${['Recebimento','Beneficiamento','Classificação','Debulha','Secador','Torre / Ensaque','Tratamento Adicional','Armazém','Controle de Qualidade','Laboratório','Planejamento','Administrativo','Outro'].map(s=>`<option>${esc(s)}</option>`).join('')}</select></div><div class="field"><label for="shift">Turno automático (horário do pedido)</label><input id="shift" readonly value="${esc(turnoAutomatico())}"></div></div><div class="actions"><button type="button" class="btn secondary" onclick="badgeScreen()">VOLTAR</button><button id="regBtn" class="btn primary" type="submit">SALVAR CADASTRO ➜</button></div></form><p class="notice">Os dados são enviados ao banco de dados. Não é necessário cadastrar novamente nos próximos acessos.</p>`)}
 async function register(e){e.preventDefault();if(processing)return;const nome=document.getElementById('nm').value.trim(),setor=document.getElementById('sector').value,turno=turnoAutomatico();if(nome.length<3)return alert('Informe o nome completo.');processing=true;document.getElementById('regBtn').disabled=true;try{const p=await rpc('totem_cadastrar_colaborador',{p_cracha:badge,p_nome:nome,p_setor:setor,p_turno:turno});person=p;chooseDate()}catch(e){err(e);document.getElementById('regBtn').disabled=false}finally{processing=false}}
