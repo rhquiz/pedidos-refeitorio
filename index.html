@@ -11,7 +11,7 @@
 .special-art .illustration{height:clamp(145px,19vw,205px);width:auto;max-width:100%}
 .datechoice.selected{border-color:#24583f;background:#e2efdc;box-shadow:inset 0 0 0 2px #24583f}
 
-/* Totem: interface compacta e leitura de crachá em destaque */
+/* Totem: interface compacta para digitação do número do cartão */
 @media (min-width:700px) and (max-height:850px){.shell{padding:10px 22px}.panel{padding:18px 28px;border-radius:26px}h1{font-size:clamp(42px,7vh,70px)}h2{font-size:clamp(26px,5vh,42px)}.illustration{height:clamp(110px,22vh,180px)}.tag{margin-bottom:8px}.hint{margin-bottom:8px}.btn{min-height:52px;padding:12px 22px}.main{padding:4px 0}}
 .scan-panel{width:min(100%,1050px)}.scan-panel .scanner{max-width:900px;margin:12px auto}.scan-panel .scanner video{width:100%;height:clamp(260px,55dvh,620px);max-height:none;object-fit:cover}.scan-panel .scanbox{inset:22% 12%}.scan-panel .actions{margin-top:12px}.scan-panel h2{margin-bottom:6px}.scan-panel .hint{font-size:clamp(15px,1.7vw,21px)}
 /* Nome do colaborador em destaque para leitura no tablet */
@@ -36,44 +36,38 @@ if(kind==='egg')dish='<ellipse cx="160" cy="139" rx="64" ry="31" fill="#fff7df" 
 else{dish='<path d="M84 145q15-73 95-68 61 4 64 65-61 48-159 3" fill="#e5b758" stroke="#c98b38" stroke-width="5"/><path d="M102 128q55-39 110 1" fill="none" stroke="#fbe49a" stroke-width="14" stroke-linecap="round"/>';if(kind==='cheese'||kind==='hamcheese')dish+='<path d="M130 118l17 6 12-10 19 10" fill="none" stroke="#fff2bb" stroke-width="11" stroke-linecap="round"/>';if(kind==='ham'||kind==='hamcheese')dish+='<g fill="#cd857a"><rect x="111" y="124" width="17" height="9" rx="4"/><rect x="176" y="129" width="19" height="9" rx="4"/></g>';dish+='<g fill="#518b52"><ellipse cx="112" cy="148" rx="8" ry="4"/><ellipse cx="199" cy="143" rx="8" ry="4"/><ellipse cx="154" cy="154" rx="7" ry="3"/></g>'}return `<svg class="illustration" viewBox="0 0 320 210" aria-label="${esc(label)}" role="img">${base}${dish}<path d="M65 172q25 14 45 0" stroke="#7fa37a" stroke-width="5" fill="none" stroke-linecap="round"/></svg>`};
 const show=(html,center=true)=>{app.innerHTML=`<section class="panel ${center?'center':''}">${html}</section>`};const today=()=>{const d=new Date();return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};const plusDays=n=>{const d=new Date(today()+'T12:00:00');d.setDate(d.getDate()+n);return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`};const format=d=>new Date(d+'T12:00:00').toLocaleDateString('pt-BR',{weekday:'long',day:'2-digit',month:'long'});
 async function rpc(name,args){const r=await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`,{method:'POST',headers:{'Content-Type':'application/json','apikey':SUPABASE_KEY,'Authorization':`Bearer ${SUPABASE_KEY}`},body:JSON.stringify(args)});const t=await r.text();let data;try{data=t?JSON.parse(t):null}catch{data=t}if(!r.ok)throw new Error(typeof data==='object'?(data.message||data.error||'Falha de comunicação'):String(data));return data}
-function err(e){console.error(e);alert('Não foi possível concluir: '+(e.message||'erro desconhecido')+'. Confira a conexão e a configuração do Supabase.')}function clearState(){clearTimeout(timer);clearBadgeFallbackTimer();stopCamera();person=null;badge='';badgeOriginal='';dateChoice='';meal='';flavor='';special='';processing=false;selectedDates=[];pendingDates=[]}function home(){clearState();show(`<span class="tag">BEM-VINDO AO NOSSO REFEITÓRIO</span><h1>BOA<br>REFEIÇÃO!</h1>${art('silvercloche','Cloche prateada')}<p class="hint">Uma refeição especial começa com uma escolha.</p><button class="btn primary wide" onclick="badgeScreen()">FAZER MEU PEDIDO &nbsp; ➜</button>`)}
-function badgeScreen(){
- stopCamera();
- show(`<h2>APROXIME SEU CRACHÁ</h2><p class="hint">Posicione o código de barras na horizontal, dentro do retângulo.</p><div id="cameraWrap"><div class="scanner"><video id="camera" autoplay playsinline muted></video><div class="scanbox"></div></div><p id="cameraHint" class="hint" aria-live="polite">Preparando câmera frontal...</p></div><div class="actions"><button class="btn secondary" onclick="home()">VOLTAR AO INÍCIO</button><button class="btn outline" onclick="startBadgeFallbackTimer();startCamera()">TENTAR NOVAMENTE</button></div>`);
- document.querySelector('.panel')?.classList.add('scan-panel');
- const hint=document.getElementById('cameraHint');
- if(hint)hint.insertAdjacentHTML('afterend','<p class="hint" id="scanCountdown">Tempo para leitura: <strong id="remainingSeconds">10</strong> segundos</p>');
- startBadgeFallbackTimer();
- startCamera();
-}
-function clearBadgeFallbackTimer(){
- if(badgeFallbackTimer!==null){clearTimeout(badgeFallbackTimer);badgeFallbackTimer=null}
- if(badgeCountdownTimer!==null){clearInterval(badgeCountdownTimer);badgeCountdownTimer=null}
-}
-function startBadgeFallbackTimer(){
- clearBadgeFallbackTimer();
- let seconds=10;
- badgeCountdownTimer=setInterval(()=>{
-  seconds--;
-  const el=document.getElementById('remainingSeconds');
-  if(el)el.textContent=Math.max(seconds,0);
- },1000);
- badgeFallbackTimer=setTimeout(()=>{
-  clearBadgeFallbackTimer();
-  stopCamera();
-  badgeManualScreen();
- },10000);
-}
-function badgeManualScreen(message="Não conseguimos ler seu crachá em 10 segundos. Informe o número do crachá para continuar."){
- clearBadgeFallbackTimer();stopCamera();
- show(`<span class="tag">IDENTIFICAÇÃO ALTERNATIVA</span><h2>DIGITE SEU CRACHÁ</h2><p class="hint">${esc(message)}</p><form onsubmit="lookupBadgeManual(event)"><div class="field"><label for="manualBadgeInput">Número do crachá</label><input id="manualBadgeInput" type="text" inputmode="numeric" autocomplete="off" maxlength="24" placeholder="Número do crachá" required></div><div class="actions"><button class="btn secondary" type="button" onclick="badgeScreen()">TENTAR CÂMERA NOVAMENTE</button><button class="btn primary" id="manualBadgeSubmit" type="submit">CONTINUAR ➜</button></div></form>`);
+function err(e){console.error(e);alert('Não foi possível concluir: '+(e.message||'erro desconhecido')+'. Confira a conexão e a configuração do Supabase.')}function clearState(){clearTimeout(timer);clearBadgeFallbackTimer();person=null;badge='';badgeOriginal='';dateChoice='';meal='';flavor='';special='';processing=false;selectedDates=[];pendingDates=[]}function home(){clearState();show(`<span class="tag">BEM-VINDO AO NOSSO REFEITÓRIO</span><h1>BOA<br>REFEIÇÃO!</h1>${art('silvercloche','Cloche prateada')}<p class="hint">Digite o número do seu cartão para fazer o pedido.</p><button class="btn primary wide" onclick="badgeScreen()">FAZER MEU PEDIDO &nbsp; ➜</button>`)}
+function badgeScreen(){ badgeManualScreen(); }
+function clearBadgeFallbackTimer(){ }
+function badgeManualScreen(message="Digite o número que aparece no seu cartão de acesso. Pode digitar com ou sem os zeros do começo."){
+ show(`<span class="tag">IDENTIFICAÇÃO</span><h2>DIGITE O NÚMERO DO CARTÃO</h2>
+ <p class="hint">${esc(message)}</p>
+ <div style="max-width:440px;margin:12px auto 24px;padding:18px;border:2px solid #cbd8c5;border-radius:24px;background:#fffef8;box-shadow:0 10px 25px #315b4210">
+   <svg viewBox="0 0 360 190" role="img" aria-label="Exemplo ilustrativo de cartão de acesso, mostrando onde fica o número" style="display:block;width:100%;height:auto">
+    <rect x="5" y="5" width="350" height="180" rx="20" fill="#f4f0e4" stroke="#24583f" stroke-width="4"/>
+    <rect x="22" y="22" width="58" height="58" rx="12" fill="#dfeadd"/>
+    <circle cx="51" cy="42" r="11" fill="#6d9a70"/><path d="M31 69q20-28 40 0" fill="#6d9a70"/>
+    <text x="95" y="43" font-size="13" font-weight="800" fill="#24583f">CARTÃO DE ACESSO</text>
+    <text x="95" y="62" font-size="10" fill="#596b5c">Exemplo ilustrativo</text>
+    <text x="24" y="105" font-size="12" font-weight="700" fill="#304038">NÚMERO DO CARTÃO</text>
+    <rect x="20" y="115" width="320" height="48" rx="9" fill="#ffffff" stroke="#b7c9b0" stroke-width="2"/>
+    <text x="180" y="146" text-anchor="middle" font-size="25" font-weight="900" letter-spacing="2" fill="#873f4a">0000400531</text>
+   </svg>
+   <p style="margin:8px 0 0;font-size:13px;color:#647264;text-align:center">Exemplo fictício: digite os números impressos no seu próprio cartão.</p>
+ </div>
+ <form onsubmit="lookupBadgeManual(event)">
+  <div class="field"><label for="manualBadgeInput">Número do cartão</label><input id="manualBadgeInput" type="text" inputmode="numeric" pattern="[0-9]{1,24}" autocomplete="off" maxlength="24" placeholder="Digite o número do cartão" required autofocus></div>
+  <p class="notice">Não precisa colocar os zeros do começo. O sistema tentará localizar o cadastro com ou sem eles.</p>
+  <div class="actions"><button class="btn secondary" type="button" onclick="home()">VOLTAR AO INÍCIO</button><button class="btn primary" id="manualBadgeSubmit" type="submit">CONTINUAR ➜</button></div>
+ </form>`);
 }
 function lookupBadgeManual(event){
  event.preventDefault();
  const code=document.getElementById('manualBadgeInput')?.value.trim()||'';
- if(!/^\d{1,24}$/.test(code)){alert('Digite somente os números do crachá.');return}
+ if(!/^\\d{1,24}$/.test(code)){alert('Digite somente os números do cartão.');return}
  lookup(code,true);
 }
+
 // Retira somente os zeros iniciais. Ex.: 0000400531 -> 400531.
 function codigoDoCracha(raw){
  const original=String(raw??'').trim();
@@ -84,9 +78,17 @@ function codigoDoCracha(raw){
 // Um resultado nulo significa crachá ausente; falha de rede NÃO abre cadastro.
 async function buscarCracha(original){
  const code=codigoDoCracha(original);
- let p=await rpc('totem_buscar_colaborador',{p_cracha:code});
- if(!p && original!==code)p=await rpc('totem_buscar_colaborador',{p_cracha:original});
- return p;
+ const candidatos=[String(original??'').trim(),code];
+ // Tenta formatos comuns com zeros à esquerda, caso o cadastro no banco esteja preenchido assim.
+ for(const tamanho of [6,8,10,12,14,16,18,20,22,24]){
+  if(code.length<tamanho)candidatos.push(code.padStart(tamanho,'0'));
+ }
+ const unicos=[...new Set(candidatos.filter(Boolean))];
+ for(const candidato of unicos){
+  const p=await rpc('totem_buscar_colaborador',{p_cracha:candidato});
+  if(p)return p;
+ }
+ return null;
 }
 async function lookup(raw,manual=false){
  if(processing)return;
@@ -97,7 +99,7 @@ async function lookup(raw,manual=false){
   if(hint)hint.textContent='Leitura inválida. Aproxime o código de barras e tente novamente.';
   return;
  }
- processing=true;clearBadgeFallbackTimer();stopCamera();badge=code;badgeOriginal=original;
+ processing=true;clearBadgeFallbackTimer();badge=code;badgeOriginal=original;
  show('<h2>CONSULTANDO CRACHÁ...</h2><p class="hint">Só um instante.</p>');
  try{
   const p=await buscarCracha(original);
@@ -161,7 +163,8 @@ async function saveOrder(){
  const saveBtn=document.getElementById('saveBtn');
  if(saveBtn)saveBtn.disabled=true;
  try{
-  const candidates=[badgeOriginal,badge,codigoDoCracha(badgeOriginal)].filter((v,i,a)=>v&&a.indexOf(v)===i);
+  const baseCode=codigoDoCracha(badgeOriginal);
+  const candidates=[badgeOriginal,badge,baseCode,...[6,8,10,12,14,16,18,20,22,24].map(n=>baseCode&&baseCode.length<n?baseCode.padStart(n,'0'):null)].filter((v,i,a)=>v&&a.indexOf(v)===i);
   let res=null,lastError=null;
   // Tenta primeiro exatamente o número lido/digitado e depois sua versão sem zeros iniciais.
   for(const candidate of candidates){
@@ -186,76 +189,6 @@ async function saveOrder(){
 }
 function nextAfterDuplicate(){dateChoice=pendingDates.shift();meal='';flavor='';special='';chooseMeal()}
 function success(){if(pendingDates.length){const done=dateChoice;dateChoice=pendingDates.shift();meal='';flavor='';special='';show(`<h2>PEDIDO CONFIRMADO!</h2>${art('success')}<p class="hint">Pedido para ${esc(format(done))} registrado!</p><div class="summary"><strong>Agora escolha a refeição para ${esc(format(dateChoice))}.</strong></div><button class="btn primary wide" onclick="chooseMeal()">FAZER O PRÓXIMO PEDIDO ➜</button><button class="btn secondary" onclick="home()" style="margin-top:12px">ENCERRAR</button>`);return}show(`<h2>PEDIDO CONFIRMADO!</h2>${art('success')}<h3>OBRIGADO!</h3><p class="hint">Sua refeição foi registrada com sucesso.</p><button class="btn primary wide" onclick="home()">NOVO PEDIDO ➜</button><p class="notice">Voltando ao início em <strong id="seconds">5</strong> segundos...</p>`);let n=5;timer=setInterval(()=>{n--;const el=document.getElementById('seconds');if(el)el.textContent=n;if(n<=0){clearInterval(timer);home()}},1000)}
-// Leitor ZXing: usa a câmera traseira e lê códigos de barras lineares.
-// Necessita HTTPS e acesso à biblioteca CDN no dispositivo.
-let cameraSession=0;let badgeFallbackTimer=null;let badgeCountdownTimer=null;
-function loadZXing(){
-  if(window.ZXing?.BrowserMultiFormatReader)return Promise.resolve();
-  if(window.zxingLoading)return window.zxingLoading;
-  window.zxingLoading=new Promise((resolve,reject)=>{
-    const script=document.createElement('script');
-    script.src='https://cdn.jsdelivr.net/npm/@zxing/library@0.20.0/umd/index.min.js';
-    script.onload=()=>window.ZXing?.BrowserMultiFormatReader?resolve():reject(new Error('ZXing indisponível'));
-    script.onerror=()=>reject(new Error('Não foi possível carregar a biblioteca ZXing. Confira a internet.'));
-    document.head.appendChild(script);
-  }).catch(e=>{window.zxingLoading=null;throw e});
-  return window.zxingLoading;
-}
-async function startCamera(){
-  stopCamera();
-  const session=++cameraSession;
-  const wrap=document.getElementById('cameraWrap');
-  const hint=document.getElementById('cameraHint');
-  if(!wrap||!hint)return;
-  wrap.classList.remove('hidden');
-  hint.textContent='Preparando câmera...';
-  if(!navigator.mediaDevices?.getUserMedia){hint.textContent='Abra o site em HTTPS no Chrome ou Safari e autorize a câmera.';return}
-  try{
-    await loadZXing();
-    if(session!==cameraSession)return;
-    const formats=[ZXing.BarcodeFormat.CODE_128,ZXing.BarcodeFormat.CODE_39,
-      ZXing.BarcodeFormat.ITF,ZXing.BarcodeFormat.CODABAR,
-      ZXing.BarcodeFormat.EAN_13,ZXing.BarcodeFormat.EAN_8];
-    const hints=new Map();
-    hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS,formats);
-    hints.set(ZXing.DecodeHintType.TRY_HARDER,true);
-    scanFallback=new ZXing.BrowserMultiFormatReader(hints,250);
-    hint.textContent='Posicione as listrinhas na horizontal, dentro da área. Afaste um pouco para focar.';
-    await scanFallback.decodeFromConstraints(
-      {audio:false,video:{facingMode:{ideal:'user'},width:{ideal:1280},height:{ideal:720}}},
-      'camera',
-      (result,error)=>{
-        if(session!==cameraSession||!result||processing)return;
-        const code=String(result.getText()||'').trim();
-        if(!codigoDoCracha(code)){
-          const hint=document.getElementById('cameraHint');
-          if(hint)hint.textContent='Código não numérico detectado. Reposicione o crachá.';
-          return;
-        }
-        stopCamera();
-        if(navigator.vibrate)navigator.vibrate(80);
-        lookup(code); // Mantém os zeros iniciais do crachá.
-      }
-    );
-  }catch(e){
-    if(session!==cameraSession)return;
-    console.error('Erro de leitura de crachá:',e);
-    hint.textContent='Não foi possível ler pela câmera. Verifique a permissão e tente novamente ou digite o crachá.';
-    if(scanFallback){try{scanFallback.reset()}catch{}scanFallback=null}
-  }
-}
-function stopCamera(){
-  cameraSession++;
-  if(scannerTimer){clearInterval(scannerTimer);scannerTimer=null}
-  if(scanFallback){try{scanFallback.reset()}catch{}scanFallback=null}
-  if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}
-  const video=document.getElementById('camera');
-  if(video?.srcObject){try{video.srcObject.getTracks().forEach(t=>t.stop())}catch{}video.srcObject=null}
-  const wrap=document.getElementById('cameraWrap');
-  if(wrap)wrap.classList.add('hidden');
-  scanDetector=null;
-}
-window.addEventListener('beforeunload',stopCamera);
 try { home(); } catch (error) {
   console.error('Erro ao iniciar Refeitório VYLOR:', error);
   app.innerHTML='<section class="panel center"><h2>Não foi possível abrir o refeitório</h2><p>Atualize a página. Se continuar, informe à equipe responsável.</p></section>';
