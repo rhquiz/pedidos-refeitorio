@@ -161,25 +161,27 @@ async function register(e){
  }finally{processing=false}
 }
 function dates(){
- const now=brasiliaParts();
- const weekday=new Date(now.date+'T12:00:00Z').getUTCDay();
- const early=now.hour<6;
- const options=[];
- // Ceia: entre 00:00 e 05:59, permitir pedido para o próprio dia.
- // Sábado de madrugada também é permitido para quem está encerrando o 3º turno.
- if(early && weekday!==0)options.push({d:now.date,title:'HOJE'});
- if(weekday===5){
-  options.push({d:plusDays(1),title:'SÁBADO'},{d:plusDays(3),title:'SEGUNDA-FEIRA'});
- }else if(weekday>=1&&weekday<=4){
-  options.push({d:plusDays(1),title:'AMANHÃ'});
- }
- return options;
+  const now=brasiliaParts();
+  const weekday=new Date(now.date+'T12:00:00Z').getUTCDay();
+  const options=[];
+  // Ceia: até 05h59, permitir também a refeição de hoje (exceto domingo).
+  if(now.hour<6 && weekday!==0) options.push({d:now.date,title:'HOJE'});
+  // Três próximas datas de refeição: pula domingo, preservando sábado e segunda-feira.
+  let offset=1;
+  while(options.filter(x=>x.d!==now.date).length<3){
+    const d=plusDays(offset++);
+    const day=new Date(d+'T12:00:00Z').getUTCDay();
+    if(day===0)continue;
+    const title=offset===2?'AMANHÃ':new Date(d+'T12:00:00Z').toLocaleDateString('pt-BR',{timeZone:'UTC',weekday:'long'}).toUpperCase();
+    options.push({d,title});
+  }
+  return options;
 }
 function chooseDate(){
  const list=dates();pendingDates=[];selectedDates=[];dateChoice='';
  if(!list.length){show('<h2>PEDIDOS INDISPONÍVEIS</h2><p class="hint">Novos pedidos são feitos de segunda a sexta-feira. A ceia de sábado pode ser solicitada até 05h59 do próprio sábado.</p><button class="btn primary" onclick="home()">VOLTAR AO INÍCIO</button>');return}
  const friday=list.some(x=>x.title==='SÁBADO')&&list.some(x=>x.title==='SEGUNDA-FEIRA');
- const note=list.some(x=>x.title==='HOJE')?'Para a ceia desta madrugada, selecione HOJE. Você também pode selecionar outra data disponível.':friday?'Na sexta-feira, escolha sábado, segunda-feira ou os dois dias. Cada dia terá uma refeição própria.':'Selecione a data da sua refeição.';
+ const note=list.some(x=>x.title==='HOJE')?'Para a ceia desta madrugada, selecione HOJE. Você também pode escolher as próximas datas.':'Selecione uma ou mais datas. Você poderá escolher uma refeição para cada dia.';
  show(`<span class="tag nome-colaborador">OLÁ, ${esc(person.nome.split(' ')[0].toUpperCase())}!</span><h2>PARA QUAL DIA?</h2><p class="hint">${note}</p><div class="dategrid">${list.map(x=>`<button type="button" class="datechoice ${selectedDates.includes(x.d)?'selected':''}" data-date="${x.d}" onclick="selectDate('${x.d}')">${x.title}<br><small>${esc(format(x.d))}</small></button>`).join('')}</div><div class="actions"><button class="btn secondary" onclick="home()">CANCELAR</button><button class="btn primary" onclick="beginOrders()">CONTINUAR ➜</button></div>`);
 }
 function selectDate(d){
